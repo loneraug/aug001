@@ -24,24 +24,32 @@ small{display:block;color:#777;font-size:12px;margin-top:2px}
 </div>
 <script>
 (function(){
-  var host=location.hostname, owner=host.split('.')[0], repo=location.pathname.split('/')[1];
+  var host=location.hostname, owner=host.split('.')[0];
+  var parts=location.pathname.split('/').filter(function(s){return s;});
+  var repo=parts[0]||'';
+  if(!repo||repo.toLowerCase().indexOf('.html')!==-1){repo=owner+'.github.io';}
   var bc=document.getElementById('bc'), msg=document.getElementById('msg'), ul=document.getElementById('list');
   if(!repo||host.indexOf('github.io')<0){msg.textContent='GitHub Pages 주소에서 열어주세요.';return;}
 
   function enc(p){return p.split('/').map(encodeURIComponent).join('/');}
   function curPath(){
-    var h=decodeURIComponent(location.hash.replace(/^#\/?/,''));
-    return h.replace(/\/+$/,'');
+    try{return decodeURIComponent(location.hash.replace(/^#\/?/,'' )).replace(/\/+$/,'');}
+    catch(e){return '';}
+  }
+  function fmt(b){
+    if(b<1024)return b+' B';
+    if(b<1024*1024)return (b/1024).toFixed(1)+' KB';
+    return (b/1024/1024).toFixed(1)+' MB';
   }
   function crumbs(path){
     bc.innerHTML='';
     var root=document.createElement('a');root.href='#/';root.textContent='홈';bc.appendChild(root);
     if(!path)return;
-    var parts=path.split('/'),acc='';
-    parts.forEach(function(p,i){
+    var parts2=path.split('/'),acc='';
+    parts2.forEach(function(p,i){
       acc+=(i?'/':'')+p;
       var s=document.createElement('span');s.textContent='›';bc.appendChild(s);
-      if(i===parts.length-1){var t=document.createElement('b');t.textContent=p;bc.appendChild(t);}
+      if(i===parts2.length-1){var t=document.createElement('b');t.textContent=p;bc.appendChild(t);}
       else{var a=document.createElement('a');a.href='#/'+enc(acc);a.textContent=p;bc.appendChild(a);}
     });
   }
@@ -49,12 +57,12 @@ small{display:block;color:#777;font-size:12px;margin-top:2px}
     var path=curPath();
     crumbs(path);
     ul.innerHTML='';msg.style.display='block';msg.textContent='불러오는 중...';
-    fetch('https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+enc(path))
-      .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+    fetch('https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+(path?enc(path):''))
+      .then(function(r){if(r.status===403)throw new Error('rate');if(!r.ok)throw new Error(r.status);return r.json();})
       .then(function(items){
-        if(!Array.isArray(items))throw new Error('not a folder');
+        if(!Array.isArray(items)){location.href=enc(path);return;}
         var dirs=items.filter(function(f){return f.type==='dir'&&f.name.charAt(0)!=='.';});
-        var files=items.filter(function(f){return f.type==='file'&&/\.html?$/i.test(f.name)&&f.name.toLowerCase()!=='index.html';});
+        var files=items.filter(function(f){return f.type==='file'&&f.name.charAt(0)!=='.'&&f.name.toLowerCase()!=='index.html';});
         dirs.sort(function(a,b){return a.name<b.name?-1:1;});
         files.sort(function(a,b){return a.name<b.name?-1:1;});
         if(!dirs.length&&!files.length){msg.textContent='비어 있습니다.';return;}
@@ -69,17 +77,22 @@ small{display:block;color:#777;font-size:12px;margin-top:2px}
         files.forEach(function(f){
           var li=document.createElement('li');
           var a=document.createElement('a');
+          var isHtml=/\.html?$/i.test(f.name);
           var rel=enc((path?path+'/':'')+f.name);
           a.href=rel;a.textContent=f.name;
-          var s=document.createElement('small');s.textContent=f.name;
-          li.appendChild(a);li.appendChild(s);ul.appendChild(li);
-          fetch(rel).then(function(r){return r.text();}).then(function(t){
-            var m=t.match(/<title>([^<]*)<\/title>/i);
-            if(m&&m[1].trim())a.textContent=m[1].trim();
-          }).catch(function(){});
+          var s=document.createElement('small');s.textContent=f.name+' · '+fmt(f.size);li.appendChild(a);li.appendChild(s);ul.appendChild(li);
+          if(isHtml){
+            fetch(rel).then(function(r){return r.text();}).then(function(t){
+              var m=t.match(/<title>([^<]*)<\/title>/i);
+              if(m&&m[1].trim())a.textContent=m[1].trim();
+            }).catch(function(){});
+          }
         });
       })
-      .catch(function(){msg.style.display='block';msg.textContent='목록을 불러오지 못했습니다. 잠시 후 새로고침해 주세요.';});
+      .catch(function(e){
+        msg.style.display='block';
+        msg.textContent=(e&&e.message==='rate')?'요청이 많아서 잠시 막혔어요. 1분 뒤에 새로고침해 주세요.':'목록을 불러오지 못했습니다. 잠시 후 새로고침해 주세요.';
+      });
   }
   window.addEventListener('hashchange',render);
   render();
