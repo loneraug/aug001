@@ -1,13 +1,88 @@
 <!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <title>aug001</title>
-</head>
-<body>
-  <h1>내 프로그램들</h1>
-  <ul>
-    <li><a href="프로그램들/MidiEditor/">MidiEditor 열기</a></li>
-  </ul>
-</body>
-</html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>차트 목록</title>
+<style>
+body{margin:0;padding:16px;background:#fff;color:#000;font-family:"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+#wrap{max-width:720px;margin:0 auto}
+h1{font-size:18px;margin:0 0 10px}
+#bc{font-size:14px;margin:0 0 10px;padding:8px 0;border-bottom:2px solid #ccc}
+#bc a{color:#0645ad;text-decoration:none}
+#bc span{color:#777;margin:0 4px}
+ul{list-style:none;padding:0;margin:0}
+li{padding:10px 0;border-bottom:1px solid #ddd}
+a{color:#0645ad;text-decoration:none;font-size:15px}
+a:hover{text-decoration:underline}
+li.d a{font-weight:bold}
+small{display:block;color:#777;font-size:12px;margin-top:2px}
+#msg{color:#777;font-size:14px;padding:8px 0}
+</style></head><body><div id="wrap">
+<h1>차트 목록</h1>
+<div id="bc"></div>
+<div id="msg"></div>
+<ul id="list"></ul>
+</div>
+<script>
+(function(){
+  var host=location.hostname, owner=host.split('.')[0], repo=location.pathname.split('/')[1];
+  var bc=document.getElementById('bc'), msg=document.getElementById('msg'), ul=document.getElementById('list');
+  if(!repo||host.indexOf('github.io')<0){msg.textContent='GitHub Pages 주소에서 열어주세요.';return;}
+
+  function enc(p){return p.split('/').map(encodeURIComponent).join('/');}
+  function curPath(){
+    var h=decodeURIComponent(location.hash.replace(/^#\/?/,''));
+    return h.replace(/\/+$/,'');
+  }
+  function crumbs(path){
+    bc.innerHTML='';
+    var root=document.createElement('a');root.href='#/';root.textContent='홈';bc.appendChild(root);
+    if(!path)return;
+    var parts=path.split('/'),acc='';
+    parts.forEach(function(p,i){
+      acc+=(i?'/':'')+p;
+      var s=document.createElement('span');s.textContent='›';bc.appendChild(s);
+      if(i===parts.length-1){var t=document.createElement('b');t.textContent=p;bc.appendChild(t);}
+      else{var a=document.createElement('a');a.href='#/'+enc(acc);a.textContent=p;bc.appendChild(a);}
+    });
+  }
+  function render(){
+    var path=curPath();
+    crumbs(path);
+    ul.innerHTML='';msg.style.display='block';msg.textContent='불러오는 중...';
+    fetch('https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+enc(path))
+      .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+      .then(function(items){
+        if(!Array.isArray(items))throw new Error('not a folder');
+        var dirs=items.filter(function(f){return f.type==='dir'&&f.name.charAt(0)!=='.';});
+        var files=items.filter(function(f){return f.type==='file'&&/\.html?$/i.test(f.name)&&f.name.toLowerCase()!=='index.html';});
+        dirs.sort(function(a,b){return a.name<b.name?-1:1;});
+        files.sort(function(a,b){return a.name<b.name?-1:1;});
+        if(!dirs.length&&!files.length){msg.textContent='비어 있습니다.';return;}
+        msg.style.display='none';
+        dirs.forEach(function(d){
+          var li=document.createElement('li');li.className='d';
+          var a=document.createElement('a');
+          a.href='#/'+enc((path?path+'/':'')+d.name);
+          a.textContent='📁 '+d.name;
+          li.appendChild(a);ul.appendChild(li);
+        });
+        files.forEach(function(f){
+          var li=document.createElement('li');
+          var a=document.createElement('a');
+          var rel=enc((path?path+'/':'')+f.name);
+          a.href=rel;a.textContent=f.name;
+          var s=document.createElement('small');s.textContent=f.name;
+          li.appendChild(a);li.appendChild(s);ul.appendChild(li);
+          fetch(rel).then(function(r){return r.text();}).then(function(t){
+            var m=t.match(/<title>([^<]*)<\/title>/i);
+            if(m&&m[1].trim())a.textContent=m[1].trim();
+          }).catch(function(){});
+        });
+      })
+      .catch(function(){msg.style.display='block';msg.textContent='목록을 불러오지 못했습니다. 잠시 후 새로고침해 주세요.';});
+  }
+  window.addEventListener('hashchange',render);
+  render();
+})();
+</script>
+</body></html>
